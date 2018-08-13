@@ -1,4 +1,4 @@
-//C++ include                                                                                                                                                         
+//C++ include                                                                                                                           
 #include <iterator>
 #include <iostream>
 #include <stdio.h>
@@ -13,20 +13,23 @@
 #include <list>
 #include <cctype>
 
-//root include                                                                                                                                                        
+//root include                                                                                                                          
 #include "TH1F.h"
 #include "TMath.h"
 #include "TStyle.h"
 #include "TColor.h"
 #include "TCanvas.h"
 #include "TROOT.h"
+#include "TLine.h"
 
-//Use it to double check the value in your list
-void PrintList(std::list<int> List2){
+using namespace std;
+
+//Use it if you need to double check the values in your list
+/*void PrintList(std::list<int> List2){
   for (std::list<int>::iterator it = List2.begin(); it != List2.end(); it++)
     std::cout << *it << ' ';
   return;
-}
+}*/
 
 //Integrate the distribution until the 95% of its total
 double Value95(std::list<int> List){
@@ -46,45 +49,59 @@ double Value95(std::list<int> List){
 }
 
 //Calculate the upper limit                                                                                                                                           
-void Upper_limit_first(){
+void Null_hypothesis(){
   //Given N number of predicted events                                                                                                                                
   double N = 40.0;
-  //Poisson distributed uncertainty sqrt(N)                                                                                                                           
-  double Nerr = sqrt(N);
+  
   //number of trial                                                                                                                                                   
-  int trial = 1000;
+  const int trial = 100000;
   
   std::list<int> mylist;
   std::list<int> mylist_bkg;
-  std::list<int> mylist_sys;
   
   //Random generator from ROOT
   TRandom *r0 = new TRandom();
-  gRandom = new TRandom3();
   
   double distribution[trial];
+  double distribution_sys[trial];
+  //Systematic uncertainties on the background
+  double Bkg_st = 0.15;//to be calculated based on syst study 
+  
   //create an histogram ROOT [OPTIONAL]
-  TH1D * hist = new TH1D("hist", ";x;Entries", 1000, 0.0, 100);
+  TCanvas * c1    = new TCanvas("c1", "NullHyp",5,5,800,600);
+  TH1D * Null     = new TH1D("Null",     "Events;Entries;", 1000, 0.0, 100);
+  TH1D * Null_sys = new TH1D("Null_sys", "Events;Entries;", 1000, 0.0, 100);
 
   for (int i=0; i < trial; i++){
     distribution[i] = r0->Poisson(N);
-    //fill a list                                                                                                                                                     
-    mylist.push_back(distribution[i]);
     //fill the histogram                                                                                                                                              
-    hist->Fill(distribution[i]);
+    Null->Fill(distribution[i]);
+    //add systematic to the backgound distribution
+    distribution_sys[i] = gRandom->Gaus(0, Bkg_st*distribution[i]);
+    Null_sys->Fill(distribution[i]+distribution_sys[i]);
+    //fill a list
+    mylist_bkg.push_back(distribution[i]+distribution_sys[i]);
   }
 //Sort the values in the list
-  mylist.sort();
+  mylist_bkg.sort();
+  //Expected limits in null hypothesis (select a 95% value from the distribution), estimate sensitivity to new physics
+  //Can be used to quantify the likelihood of an excess
+  Float_t CI_sys = Value95(mylist_bkg);
   
   // plot an histogram ROOT [OPTIONAL]
-  TCanvas * c1= new TCanvas("c1", "random",5,5,800,600);
-  hist->Draw();
-  hist->SaveAs("random.pdf");
+  Null_sys->SetLineColor(kBlue+1);
+  Null_sys->SetFillColor(kBlue+1);
+  Null_sys->SetFillStyle(3244);
+  gPad->SetLogy();
+  Null->Draw();
+  Null_sys->Draw("SAME");
 
-  //Select a 95% value from the distribution:                                                                                                                         
-  double CI = Value95(mylist);
+  //Draw a line at 95% value
+  Float_t ymax = Null->GetMaximum();
+  TLine *line = new TLine(CI_sys,0,CI_sys,ymax);
+  line->SetLineColor(kRed);
+  line->SetLineWidth(5);
+  line->Draw();
 
-  //For a given N and CI the signal will be defined as S = CI - N                                                                                                     
-  //This is the "lower limit" for the signal. If the signal was any bigger we would have it seen 95% of the time                                                        
-  double S = CI - N;
+  Null->SaveAs("NullHypothesis.pdf");
  }
